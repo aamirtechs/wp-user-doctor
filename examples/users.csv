@@ -1,0 +1,17 @@
+ID,user_login,user_nicename,user_email,url,user_registered,user_status,display_name,user_role,last_login
+1,admin,admin,admin@example.com,https://example.com,2020-01-15 08:00:00,0,Site Admin,administrator,2026-11-10 09:00:00
+2,sarah,sarah,sarah.jones@example.com,https://example.com,2021-03-02 10:00:00,0,Sarah Jones,editor,2026-11-09 14:00:00
+3,mike,mike,mike.chen@example.com,https://example.com,2022-05-20 11:00:00,0,Mike Chen,administrator,2026-06-01 08:30:00
+4,oldboss,oldboss,oldboss@gmail.com,https://example.com,2019-08-11 09:00:00,0,Old Boss,administrator,
+5,priya,priya,priya@example.com,https://example.com,2023-01-10 12:00:00,0,Priya Patel,administrator;editor,2026-11-10 10:00:00
+6,tom,tom,tom@example.com,https://example.com,2021-11-30 09:00:00,0,Tom Reed,subscriber,2025-01-01 07:00:00
+7,newhire,newhire,newhire@example.com,https://example.com,2026-10-20 09:00:00,0,New Hire,contributor,
+8,jane,jane,jane@example.com,https://example.com,2022-02-14 09:00:00,0,Jane Doe,author,2026-11-08 16:00:00
+9,janedup,janedup,jane@example.com,https://example.com,2024-04-01 09:00:00,0,Jane Dup,subscriber,2026-11-05 09:00:00
+10,badmail,badmail,not-an-email,https://example.com,2023-06-01 09:00:00,0,Bad Mail,subscriber,2026-11-02 09:00:00
+11,norole,norole,norole@example.com,https://example.com,2024-01-15 09:00:00,0,No Role,,2026-11-01 09:00:00
+12,weird,weird,weird@example.com,https://example.com,2024-03-03 09:00:00,0,Weird Role,superuser,2026-10-30 09:00:00
+13,sarah,sarah,sarah.jones@example.com,https://example.com,2021-03-02 10:00:00,0,Sarah Jones,editor,2026-11-09 14:00:00
+14,short,short
+15,future,future,future@example.com,https://example.com,2027-01-01 09:00:00,0,Future User,subscriber,2026-11-10 09:00:00
+16,baddate,baddate,baddate@example.com,https://example.com,not-a-date,0,Bad Date,subscriber,2026-11-10 09:00:00

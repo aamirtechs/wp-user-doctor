@@ -1,0 +1,4 @@
+ID,user_login,user_nicename,user_email,url,user_registered,user_status,display_name,user_role,last_login
+1,dan,dan,dan@example.com,https://example.com,2021-05-01 09:00:00,0,Dan Sub,subscriber,2025-06-01 09:00:00
+2,erin,erin,erin@example.com,https://example.com,2026-09-15 09:00:00,0,Erin Contrib,contributor,
+3,fred,fred,fred@example.com,https://example.com,2022-02-02 09:00:00,0,Fred Multi,editor;author,2026-11-10 09:00:00

@@ -1,0 +1,4 @@
+ID,user_login,user_nicename,user_email,url,user_registered,user_status,display_name,user_role,last_login
+1,alice,alice,alice@example.com,https://example.com,2022-01-10 09:00:00,0,Alice Admin,administrator,2026-11-10 09:00:00
+2,ben,ben,ben@example.com,https://example.com,2023-04-05 09:00:00,0,Ben Editor,editor,2026-11-09 10:00:00
+3,cara,cara,cara@example.com,https://example.com,2024-07-20 09:00:00,0,Cara Author,author,2026-11-08 11:00:00
