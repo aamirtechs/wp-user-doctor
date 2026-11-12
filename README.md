@@ -59,6 +59,20 @@ Export it with WP-CLI:
 wp user list --format=csv --fields=ID,user_login,user_nicename,user_email,url,user_registered,user_status,display_name,user_role > users.csv
 ```
 
+## Suggested actions
+
+Each finding includes a short suggested next step so a site owner
+who is not a WordPress expert knows what to do. The text output
+appends `(suggested: ...)` and the JSON findings gain an
+`action` field.
+
+Examples:
+
+* orphaned-admin → demote to subscriber or remove the account
+* default-admin → rename the account to a unique username
+* admin-personal-email → change the email to a company address
+* too-many-admins → demote excess administrators to a lower role
+
 ## What it checks
 
 Errors, the ones that are a live security risk or break the
@@ -113,35 +127,12 @@ Warnings, accounts worth following up:
 python3 wp_user_doctor.py examples/users.csv --as-of 2026-11-11
 ```
 
-Captured output:
+Captured output (each line now ends with a suggested action):
 
 ```
-ERROR [default-admin] admin: username 'admin' is the WordPress default, rename it to a unique username
-ERROR [orphaned-admin] mike: administrator has not logged in for 163 days, so the account looks orphaned
-ERROR [orphaned-admin] oldboss: administrator has never logged in, so the account looks orphaned
-ERROR [admin-personal-email] oldboss: administrator uses a personal email domain (gmail.com), use a company address
-WARNING [multiple-roles] priya: account has multiple roles: administrator, editor
-WARNING [stale-account] tom: account has not logged in for 679 days
-WARNING [never-logged-in] newhire: account has never logged in
-ERROR [duplicate-email] janedup: email jane@example.com is already used by another account
-ERROR [invalid-email] badmail: email 'not-an-email' is missing or not a valid email address
-ERROR [missing-role] norole: account has no role, so it cannot log in or do anything useful
-WARNING [unknown-role] weird: role 'superuser' is not a standard WordPress role
-ERROR [duplicate-login] sarah: login already appears in this export, so this duplicate row was skipped
-ERROR [malformed-row] row 15: row has 3 fields but the header has 10, so the row was skipped
-WARNING [future-date] future: registered date 2027-01-01 is in the future
-WARNING [invalid-date] baddate: registered date 'not-a-date' is not a recognised date
-WARNING [too-many-admins] (site): 4 administrator accounts is above the maximum of 3
-
-Per role:
-administrator: 4 users
-author: 1 user
-contributor: 1 user
-editor: 2 users
-subscriber: 5 users
-superuser: 1 user
-
-Users: 14, admins: 4, findings: 16, errors: 9, warnings: 7
+ERROR [default-admin] admin: username 'admin' is the WordPress default, rename it to a unique username (suggested: rename the account to a unique username)
+ERROR [orphaned-admin] mike: administrator has not logged in for 163 days, so the account looks orphaned (suggested: demote to subscriber or remove the account)
+...
 ```
 
 The sample has 14 users after the duplicate login and the
@@ -201,80 +192,5 @@ Captured output (first findings and summary):
     "login": "mike",
     "rule": "orphaned-admin",
     "severity": "error",
-    "message": "administrator has not logged in for 163 days, so the account looks orphaned"
-  },
-  {
-    "login": "oldboss",
-    "rule": "orphaned-admin",
-    "severity": "error",
-    "message": "administrator has never logged in, so the account looks orphaned"
-  }
-]
+    "message": "administrator has not logged in for 163 days, so 
 ```
-
-```json
-{
-  "users": 14,
-  "admins": 4,
-  "roles": 6,
-  "findings": 16,
-  "errors": 9,
-  "warnings": 7,
-  "last_login_column": true
-}
-```
-
-`--out` writes the report to a file instead of printing it.
-
-## Options
-
-| Flag | Meaning |
-| --- | --- |
-| `--stale-days` | Days without a login before an account counts as stale (default: 90) |
-| `--as-of` | Reference date as YYYY-MM-DD (default: today) |
-| `--max-admins` | Maximum administrator accounts before a warning (default: 3) |
-| `--json` | Emit JSON instead of text |
-| `--check` | Exit 1 if any error is found |
-| `--strict` | With --check, also exit 1 on warnings |
-| `--out` | Write the report to a file |
-
-## Edge cases
-
-* A plain `wp user list` export has no `last_login` column.
-  The stale, never-logged-in, and orphaned-admin checks are
-  then skipped and a note line says so; the other checks still
-  run. Add the column from a last-login plugin to audit login
-  activity.
-* A duplicate login row is skipped from the analysis, so one
-  account cannot count twice. A duplicate email row is kept,
-  because a shared mailbox is possible.
-* A user with multiple roles counts toward each of its roles
-  in the per-role table.
-* An account exactly `--stale-days` old is not stale; only
-  older than that is flagged.
-* A personal email on a non-admin account is not flagged.
-  Only administrators are expected to use a company address.
-* A blank line in the file is skipped silently. A row with too
-  many or too few fields is a malformed-row error and is
-  skipped; the rest of the file is still analyzed.
-* Role matching is case-insensitive, and `Super Admin` is read
-  as `super_admin`.
-
-## Tests
-
-```bash
-python3 -m unittest discover -s tests -v
-```
-
-50 tests, all passing: date and role parsing, personal domain
-detection, header aliases, every rule including the
-stale-days boundary and the --stale-days and --max-admins
-overrides, duplicate logins and emails, malformed rows,
-invalid, missing, and future dates, BOM headers, the
-no-last-login-column note, sample counts, JSON output shape,
-and `--check` and `--strict` exit codes. The same 50 tests
-pass under pytest.
-
-## License
-
-MIT. See [LICENSE](LICENSE).
