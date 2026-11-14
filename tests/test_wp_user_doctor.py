@@ -35,9 +35,7 @@ def analyze_text(text, **kwargs):
         path = handle.name
     try:
         return wud.analyze_file(
-            path, as_of=kwargs.get("as_of", AS_OF),
-            stale_days=kwargs.get("stale_days", 90),
-            max_admins=kwargs.get("max_admins", 3))
+            path, as_of=kwargs.pop("as_of", AS_OF), **kwargs)
     finally:
         os.unlink(path)
 
@@ -447,6 +445,64 @@ class TestSamples(unittest.TestCase):
         self.assertEqual(report["summary"]["warnings"], 3)
 
 
+class TestAges(unittest.TestCase):
+    def test_ages_sort_never_then_stalest_with_stable_ties(self):
+        text = HEADER
+        for login, date in (("recent", "2026-11-10"),
+                            ("never", ""), ("old", "2026-06-01"),
+                            ("today", "2026-11-11"),
+                            ("same", "2026-11-10")):
+            text += row(login, login + "@example.com", "subscriber",
+                        date)
+        report = analyze_text(text, include_ages=True)
+        self.assertEqual(report["ages"], [
+            {"login": "never", "age": "never"},
+            {"login": "old", "age": 163},
+            {"login": "recent", "age": 1},
+            {"login": "same", "age": 1},
+            {"login": "today", "age": 0},
+        ])
+        output = wud.format_text(report)
+        self.assertIn("recent: 1 day\n", output)
+        self.assertIn("today: 0 days\n", output)
+
+    def test_invalid_dates_are_not_never_and_future_dates_keep_warning(self):
+        text = HEADER
+        for login, date in (("invalid", "not-a-date"), ("never", ""),
+                            ("future", "2026-11-12")):
+            text += row(login, login + "@example.com", "subscriber",
+                        date)
+        report = analyze_text(text, include_ages=True)
+        self.assertEqual(report["ages"], [
+            {"login": "never", "age": "never"},
+            {"login": "future", "age": -1},
+            {"login": "invalid", "age": "invalid"},
+        ])
+        self.assertIn("invalid-date", rules(report))
+        self.assertIn("future-date", rules(report))
+        self.assertIn("invalid: invalid\n", wud.format_text(report))
+
+    def test_missing_column_omits_ages_with_note(self):
+        text = "login,email,role\nalice,alice@example.com,editor\n"
+        report = analyze_text(text, include_ages=True)
+        self.assertEqual(report["ages"], [])
+        output = wud.format_text(report)
+        self.assertNotIn("Last login ages:", output)
+        self.assertIn("no last_login column found", output)
+        self.assertIn("login ages were skipped", output)
+        self.assertNotIn("alice: never", output)
+
+    def test_alias_and_default_report(self):
+        text = ("login,email,role,last_logged_in\n"
+                "alice,alice@example.com,editor,2026-11-10\n")
+        default = analyze_text(text)
+        report = analyze_text(text, include_ages=True)
+        self.assertEqual(report.pop("ages"), [
+            {"login": "alice", "age": 1}])
+        self.assertEqual(report, default)
+        self.assertNotIn("Last login ages:", wud.format_text(default))
+
+
 class TestCli(unittest.TestCase):
     def run_cli(self, *argv):
         return subprocess.run(
@@ -502,6 +558,39 @@ class TestCli(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         parsed = json.loads(result.stdout)
         self.assertEqual(parsed["summary"]["users"], 3)
+
+    def test_ages_sample_and_out(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "ages.txt")
+            result = self.run_cli(self.sample("users.csv"),
+                                  "--as-of", "2026-11-11", "--ages",
+                                  "--check", "--out", out)
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stdout, "")
+            with open(out, encoding="utf-8") as handle:
+                output = handle.read()
+        self.assertLess(output.index("Per role:"),
+                        output.index("Last login ages:"))
+        self.assertLess(output.index("Last login ages:"),
+                        output.index("Users: 14"))
+        ages = output.split("Last login ages:\n")[1].split("\n\n")[0]
+        self.assertEqual(len(ages.splitlines()), 14)
+        self.assertTrue(ages.startswith(
+            "oldboss: never\nnewhire: never\ntom: 679 days\n"
+            "mike: 163 days\n"))
+        self.assertEqual(ages.count("sarah:"), 1)
+
+    def test_ages_json(self):
+        result = self.run_cli(self.sample("users.csv"),
+                              "--as-of", "2026-11-11", "--ages",
+                              "--json")
+        self.assertEqual(result.returncode, 0)
+        parsed = json.loads(result.stdout)
+        self.assertEqual(len(parsed["ages"]), 14)
+        self.assertEqual(parsed["ages"][0],
+                         {"login": "oldboss", "age": "never"})
+        self.assertEqual(parsed["ages"][3],
+                         {"login": "mike", "age": 163})
 
 
 if __name__ == "__main__":

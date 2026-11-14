@@ -165,12 +165,14 @@ def resolve_columns(header):
 class User:
     """One user, parsed from one CSV row."""
 
-    def __init__(self, login, email, registered, roles, last_login):
+    def __init__(self, login, email, registered, roles, last_login,
+                 last_login_invalid=False):
         self.login = login
         self.email = email
         self.registered = registered
         self.roles = roles
         self.last_login = last_login
+        self.last_login_invalid = last_login_invalid
 
     @property
     def is_admin(self):
@@ -331,12 +333,13 @@ def load_users(path, as_of, stale_days):
                     "administrator uses a personal email domain "
                     "(%s), use a company address" % domain))
             users.append(User(login, email, registered, roles,
-                              last_login))
+                              last_login, last_login_invalid=bool(
+                                  last_login_text and last_login is None)))
     return users, findings, has_last_login
 
 
 def analyze_file(path, as_of=None, stale_days=DEFAULT_STALE_DAYS,
-                 max_admins=DEFAULT_MAX_ADMINS):
+                 max_admins=DEFAULT_MAX_ADMINS, include_ages=False):
     """Audit one users file and return the report dict."""
     if as_of is None:
         as_of = datetime.date.today()
@@ -364,8 +367,25 @@ def analyze_file(path, as_of=None, stale_days=DEFAULT_STALE_DAYS,
                         if f.severity == "warning"),
         "last_login_column": has_last_login,
     }
-    return {"summary": summary, "roles": role_rows,
-            "findings": [f.as_dict() for f in findings]}
+    report = {"summary": summary, "roles": role_rows,
+              "findings": [f.as_dict() for f in findings]}
+    if include_ages:
+        report["ages"] = []
+        if has_last_login:
+            # Never logged in first, then oldest dates, then invalid
+            # dates. Stable sorting preserves CSV order for ties.
+            ordered = sorted(users, key=lambda user: (
+                user.last_login_invalid, user.last_login is not None,
+                user.last_login or datetime.date.min))
+            for user in ordered:
+                if user.last_login_invalid:
+                    age = "invalid"
+                elif user.last_login is None:
+                    age = "never"
+                else:
+                    age = (as_of - user.last_login).days
+                report["ages"].append({"login": user.login, "age": age})
+    return report
 
 
 def format_text(report):
@@ -384,6 +404,15 @@ def format_text(report):
             noun = "user" if row["users"] == 1 else "users"
             lines.append("%s: %d %s" % (row["role"], row["users"],
                                         noun))
+    if report.get("ages"):
+        lines.append("")
+        lines.append("Last login ages:")
+        for row in report["ages"]:
+            age = row["age"]
+            if isinstance(age, int):
+                noun = "day" if abs(age) == 1 else "days"
+                age = "%d %s" % (age, noun)
+            lines.append("%s: %s" % (row["login"], age))
     lines.append("")
     lines.append("Users: %d, admins: %d, findings: %d, errors: %d, "
                  "warnings: %d"
@@ -391,9 +420,12 @@ def format_text(report):
                     summary["findings"], summary["errors"],
                     summary["warnings"]))
     if not summary["last_login_column"]:
+        skipped = "checks"
+        if "ages" in report:
+            skipped += " and login ages"
         lines.append("Note: no last_login column found, so stale, "
-                     "never-logged-in, and orphaned-admin checks "
-                     "were skipped.")
+                     "never-logged-in, and orphaned-admin %s "
+                     "were skipped." % skipped)
     if not report["findings"]:
         lines.append("All users clean.")
     return "\n".join(lines) + "\n"
@@ -434,6 +466,9 @@ def main(argv=None):
                              "a warning (default: 3)")
     parser.add_argument("--json", action="store_true",
                         help="emit JSON instead of text")
+    parser.add_argument("--ages", action="store_true",
+                        help="show days since last login for each user, "
+                             "stalest first")
     parser.add_argument("--check", action="store_true",
                         help="exit 1 if any error is found")
     parser.add_argument("--strict", action="store_true",
@@ -450,7 +485,8 @@ def main(argv=None):
     try:
         report = analyze_file(args.path, as_of=as_of,
                               stale_days=args.stale_days,
-                              max_admins=args.max_admins)
+                              max_admins=args.max_admins,
+                              include_ages=args.ages)
     except FileNotFoundError:
         print("error: file not found: %s" % args.path, file=sys.stderr)
         return 2

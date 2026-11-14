@@ -155,6 +155,28 @@ The reference date defaults to today. `--as-of` pins it, so the
 stale day counts above are reproducible; without it the counts
 move as time passes.
 
+Add `--ages` to list every user's last-login age after the
+per-role table:
+
+```bash
+python3 wp_user_doctor.py examples/users.csv --as-of 2026-11-11 --ages
+```
+
+The list starts with `oldboss: never`, `newhire: never`,
+`tom: 679 days`, and `mike: 163 days`. Accounts that never
+logged in come first, followed by dated logins from oldest
+to newest; ties keep their CSV order. Invalid login dates
+appear last as `invalid`, and future dates have negative
+ages alongside the existing warning. Skipped duplicate and
+malformed rows do not appear. If the export has no login
+column, the ages are omitted and the note explains why.
+
+With `--ages --json`, the report also includes an `ages`
+array in the same order. Each entry has `login` and `age`,
+where `age` is an integer number of days, `"never"`, or
+`"invalid"`. The array is empty when the login column is
+absent. Without `--ages`, the report is unchanged.
+
 Use it as a CI gate: `--check` exits 1 when any error is
 found, and 0 otherwise. On the sample above it exits 1:
 
@@ -234,6 +256,7 @@ Captured output (first findings and summary):
 | `--as-of` | Reference date as YYYY-MM-DD (default: today) |
 | `--max-admins` | Maximum administrator accounts before a warning (default: 3) |
 | `--json` | Emit JSON instead of text |
+| `--ages` | Show each user's last-login age, stalest first |
 | `--check` | Exit 1 if any error is found |
 | `--strict` | With --check, also exit 1 on warnings |
 | `--out` | Write the report to a file |
@@ -266,14 +289,15 @@ Captured output (first findings and summary):
 python3 -m unittest discover -s tests -v
 ```
 
-50 tests, all passing: date and role parsing, personal domain
+56 tests, all passing: date and role parsing, personal domain
 detection, header aliases, every rule including the
 stale-days boundary and the --stale-days and --max-admins
 overrides, duplicate logins and emails, malformed rows,
 invalid, missing, and future dates, BOM headers, the
 no-last-login-column note, sample counts, JSON output shape,
-and `--check` and `--strict` exit codes. The same 50 tests
-pass under pytest.
+and `--check` and `--strict` exit codes. Login-age tests cover
+ordering, date edge cases, missing columns, aliases, sample
+output, JSON, and file output.
 
 ## License
 
