@@ -503,6 +503,66 @@ class TestCli(unittest.TestCase):
         parsed = json.loads(result.stdout)
         self.assertEqual(parsed["summary"]["users"], 3)
 
+    def test_custom_personal_domains_replace_builtins(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            users = os.path.join(tmp, "users.csv")
+            domains = os.path.join(tmp, "domains.txt")
+            with open(users, "w", encoding="utf-8") as handle:
+                handle.write(HEADER + row(
+                    "alumnus", "a@ALUMNI.EXAMPLE.COM", "administrator",
+                    "2026-11-10") + row(
+                    "gmail", "a@gmail.com", "administrator", "2026-11-10"))
+            with open(domains, "w", encoding="utf-8-sig") as handle:
+                handle.write("# Team domains\n\n  Alumni.Example.com  \n"
+                             "  # Indented comment\nalumni.example.com\n")
+            for options, expected in [
+                    (["--personal-domains", domains], "alumnus"),
+                    ([], "gmail")]:
+                with self.subTest(options=options):
+                    result = self.run_cli(
+                        users, "--as-of", "2026-11-11", "--json",
+                        "--check", *options)
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    findings = json.loads(result.stdout)["findings"]
+                    self.assertEqual([(f["login"], f["rule"])
+                                      for f in findings],
+                                     [(expected, "admin-personal-email")])
+
+    def test_empty_personal_domains_disables_domain_findings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            domains = os.path.join(tmp, "domains.txt")
+            with open(domains, "w", encoding="utf-8") as handle:
+                handle.write("# No personal domains\n\n")
+            result = self.run_cli(
+                self.sample("users.csv"), "--as-of", "2026-11-11",
+                "--json", "--personal-domains", domains)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertNotIn("admin-personal-email", rules(report))
+            self.assertEqual(report["summary"]["findings"], 15)
+
+    def test_missing_personal_domains_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "missing.txt")
+            result = self.run_cli(self.sample("clean.csv"),
+                                  "--personal-domains", path)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("cannot read personal domains", result.stderr)
+            self.assertIn(path, result.stderr)
+            self.assertEqual(result.stdout, "")
+
+    def test_personal_domains_requires_utf8(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "domains.txt")
+            with open(path, "wb") as handle:
+                handle.write(b"\xff\xfe")
+            result = self.run_cli(self.sample("clean.csv"),
+                                  "--personal-domains", path)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("cannot read personal domains", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertEqual(result.stdout, "")
+
 
 if __name__ == "__main__":
     unittest.main()
