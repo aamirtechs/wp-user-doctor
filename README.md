@@ -226,6 +226,27 @@ Captured output (first findings and summary):
 
 `--out` writes the report to a file instead of printing it.
 
+Use `--personal-domains domains.txt` to replace the built-in
+personal email providers with your team's list:
+
+```text
+# Personal domains for this audit
+alumni.example.com
+```
+
+```bash
+python3 wp_user_doctor.py users.csv --personal-domains domains.txt
+```
+
+The UTF-8 file contains one domain per line. Blank lines and
+lines starting with `#` (after optional spaces) are ignored.
+Matching is case-insensitive and uses exact domains; a listed
+domain does not include its subdomains. This list replaces,
+rather than extends, the defaults: the example flags an admin
+at `alumni.example.com` but not at `gmail.com`. An empty list
+disables personal-domain findings. Without the flag the
+built-in list still applies.
+
 ## Options
 
 | Flag | Meaning |
@@ -234,6 +255,7 @@ Captured output (first findings and summary):
 | `--as-of` | Reference date as YYYY-MM-DD (default: today) |
 | `--max-admins` | Maximum administrator accounts before a warning (default: 3) |
 | `--json` | Emit JSON instead of text |
+| `--personal-domains FILE` | Replace the personal email domains with a file, one domain per line |
 | `--check` | Exit 1 if any error is found |
 | `--strict` | With --check, also exit 1 on warnings |
 | `--out` | Write the report to a file |
@@ -266,14 +288,14 @@ Captured output (first findings and summary):
 python3 -m unittest discover -s tests -v
 ```
 
-50 tests, all passing: date and role parsing, personal domain
+54 tests, all passing: date and role parsing, personal domain
 detection, header aliases, every rule including the
 stale-days boundary and the --stale-days and --max-admins
 overrides, duplicate logins and emails, malformed rows,
 invalid, missing, and future dates, BOM headers, the
 no-last-login-column note, sample counts, JSON output shape,
-and `--check` and `--strict` exit codes. The same 50 tests
-pass under pytest.
+`--check` and `--strict` exit codes, and custom domain lists
+(replacement, comments, empty lists, and file errors).
 
 ## License
 

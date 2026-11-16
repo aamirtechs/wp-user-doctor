@@ -134,12 +134,19 @@ def parse_roles(value):
             for part in parts if part.strip()]
 
 
-def is_personal_domain(email):
+def load_personal_domains(path):
+    """Read a replacement domain list, ignoring comments and blank lines."""
+    with open(path, encoding="utf-8-sig") as handle:
+        return frozenset(line.strip().lower() for line in handle
+                         if line.strip() and not line.lstrip().startswith("#"))
+
+
+def is_personal_domain(email, personal_domains=PERSONAL_DOMAINS):
     """Return True when the email domain is a personal provider."""
     if "@" not in email:
         return False
     domain = email.rsplit("@", 1)[1].strip().lower()
-    return domain in PERSONAL_DOMAINS
+    return domain in personal_domains
 
 
 def resolve_columns(header):
@@ -178,7 +185,7 @@ class User:
         return "administrator" in self.roles
 
 
-def load_users(path, as_of, stale_days):
+def load_users(path, as_of, stale_days, personal_domains=PERSONAL_DOMAINS):
     """Read the users CSV and return (users, findings, has_last_login).
 
     A duplicate login is reported once and the duplicate row is
@@ -324,7 +331,7 @@ def load_users(path, as_of, stale_days):
                             "account has not logged in for %d days"
                             % days))
             if "administrator" in roles and email \
-                    and is_personal_domain(email):
+                    and is_personal_domain(email, personal_domains):
                 domain = email.rsplit("@", 1)[1].strip().lower()
                 findings.append(Finding(
                     login, "admin-personal-email", "error",
@@ -336,12 +343,13 @@ def load_users(path, as_of, stale_days):
 
 
 def analyze_file(path, as_of=None, stale_days=DEFAULT_STALE_DAYS,
-                 max_admins=DEFAULT_MAX_ADMINS):
+                 max_admins=DEFAULT_MAX_ADMINS,
+                 personal_domains=PERSONAL_DOMAINS):
     """Audit one users file and return the report dict."""
     if as_of is None:
         as_of = datetime.date.today()
     users, findings, has_last_login = load_users(
-        path, as_of, stale_days)
+        path, as_of, stale_days, personal_domains)
     admins = [user for user in users if user.is_admin]
     if len(admins) > max_admins:
         findings.append(Finding(
@@ -434,6 +442,9 @@ def main(argv=None):
                              "a warning (default: 3)")
     parser.add_argument("--json", action="store_true",
                         help="emit JSON instead of text")
+    parser.add_argument("--personal-domains", metavar="FILE",
+                        help="replace the built-in personal email domains "
+                             "with a file containing one domain per line")
     parser.add_argument("--check", action="store_true",
                         help="exit 1 if any error is found")
     parser.add_argument("--strict", action="store_true",
@@ -447,10 +458,19 @@ def main(argv=None):
     except ValueError as exc:
         print("error: %s" % exc, file=sys.stderr)
         return 2
+    personal_domains = PERSONAL_DOMAINS
+    if args.personal_domains:
+        try:
+            personal_domains = load_personal_domains(args.personal_domains)
+        except (OSError, UnicodeError) as exc:
+            print("error: cannot read personal domains %s: %s"
+                  % (args.personal_domains, exc), file=sys.stderr)
+            return 2
     try:
         report = analyze_file(args.path, as_of=as_of,
                               stale_days=args.stale_days,
-                              max_admins=args.max_admins)
+                              max_admins=args.max_admins,
+                              personal_domains=personal_domains)
     except FileNotFoundError:
         print("error: file not found: %s" % args.path, file=sys.stderr)
         return 2
