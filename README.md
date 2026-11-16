@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/aamirtechs/wp-user-doctor/blob/main/LICENSE) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/aamirtechs/wp-user-doctor/issues)
 
-A zero-dependency Python CLI that audits a WordPress users CSV
+A zero-dependency Python CLI that audits a WordPress users CSV or JSON
 export for the accounts that most often get a site hacked or
 leave it unmanageable: orphaned administrator accounts nobody
 has logged into for months, the default username admin,
@@ -58,6 +58,27 @@ Export it with WP-CLI:
 ```bash
 wp user list --format=csv --fields=ID,user_login,user_nicename,user_email,url,user_registered,user_status,display_name,user_role > users.csv
 ```
+
+For a JSON export, select the input format explicitly:
+
+```bash
+wp user list --format=json > users.json
+python3 wp_user_doctor.py users.json --format json
+python3 wp_user_doctor.py users.json --format json --json --check
+```
+
+JSON input is an array of user objects with the same field
+names and aliases as CSV, including WP-CLI's `roles` field.
+Key order does not matter. The first object defines the fields;
+later objects with missing or different fields are reported as
+malformed rows and skipped. Row numbers match the equivalent
+CSV (the first user is row 2). Null cells are treated as blank,
+and numeric cells are accepted. An empty array is an empty
+export. Invalid JSON, non-object records, and nested field
+values produce a readable error and exit 2.
+
+The audit and report are the same for both input formats.
+`--format json` selects JSON input; `--json` selects JSON output.
 
 ## What it checks
 
@@ -230,6 +251,7 @@ Captured output (first findings and summary):
 
 | Flag | Meaning |
 | --- | --- |
+| `--format csv\|json` | Input format (default: csv) |
 | `--stale-days` | Days without a login before an account counts as stale (default: 90) |
 | `--as-of` | Reference date as YYYY-MM-DD (default: today) |
 | `--max-admins` | Maximum administrator accounts before a warning (default: 3) |
@@ -266,14 +288,14 @@ Captured output (first findings and summary):
 python3 -m unittest discover -s tests -v
 ```
 
-50 tests, all passing: date and role parsing, personal domain
+58 tests, all passing: date and role parsing, personal domain
 detection, header aliases, every rule including the
 stale-days boundary and the --stale-days and --max-admins
 overrides, duplicate logins and emails, malformed rows,
 invalid, missing, and future dates, BOM headers, the
 no-last-login-column note, sample counts, JSON output shape,
-and `--check` and `--strict` exit codes. The same 50 tests
-pass under pytest.
+`--check` and `--strict` exit codes, JSON/CSV report parity,
+JSON aliases and key order, and malformed JSON inputs.
 
 ## License
 

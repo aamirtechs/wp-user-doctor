@@ -1,4 +1,4 @@
-"""WordPress users CSV audit CLI.
+"""WordPress users CSV and JSON audit CLI.
 
 Reads a WordPress users CSV export (from `wp user list`, plus an
 optional last_login column from a last-login plugin) and audits
@@ -163,7 +163,7 @@ def resolve_columns(header):
 
 
 class User:
-    """One user, parsed from one CSV row."""
+    """One user, parsed from one export row."""
 
     def __init__(self, login, email, registered, roles, last_login):
         self.login = login
@@ -178,8 +178,8 @@ class User:
         return "administrator" in self.roles
 
 
-def load_users(path, as_of, stale_days):
-    """Read the users CSV and return (users, findings, has_last_login).
+def load_users(path, as_of, stale_days, input_format="csv"):
+    """Read an export and return (users, findings, has_last_login).
 
     A duplicate login is reported once and the duplicate row is
     skipped, so one account cannot count twice. A malformed row
@@ -191,12 +191,26 @@ def load_users(path, as_of, stale_days):
     findings = []
     seen_logins = set()
     seen_emails = set()
+    if input_format not in ("csv", "json"):
+        raise ValueError("input format must be csv or json")
     with open(path, newline="", encoding="utf-8-sig") as handle:
-        reader = csv.reader(handle)
-        try:
-            header = next(reader)
-        except StopIteration:
-            raise ValueError("file is empty, no header row found")
+        if input_format == "json":
+            try:
+                reader = json.load(handle)
+            except json.JSONDecodeError as exc:
+                raise ValueError("invalid JSON: %s" % exc)
+            if not isinstance(reader, list):
+                raise ValueError("JSON export must be an array of user objects")
+            for index, record in enumerate(reader, start=1):
+                if not isinstance(record, dict):
+                    raise ValueError("JSON record %d must be an object" % index)
+            header = list(reader[0]) if reader else list(REQUIRED_COLUMNS)
+        else:
+            reader = csv.reader(handle)
+            try:
+                header = next(reader)
+            except StopIteration:
+                raise ValueError("file is empty, no header row found")
         columns = resolve_columns(header)
         if columns is None:
             raise ValueError(
@@ -206,6 +220,26 @@ def load_users(path, as_of, stale_days):
         has_last_login = "last_login" in columns
         has_registered = "user_registered" in columns
         for line_no, row in enumerate(reader, start=2):
+            if input_format == "json":
+                if set(row) != set(header):
+                    if len(row) != expected:
+                        message = ("row has %d fields but the header has %d, "
+                                   "so the row was skipped" % (len(row), expected))
+                    else:
+                        message = ("row field names differ from the first JSON "
+                                   "record, so the row was skipped")
+                    findings.append(Finding("row %d" % line_no,
+                                            "malformed-row", "error", message))
+                    continue
+                values = []
+                for name in header:
+                    value = row[name]
+                    if isinstance(value, (dict, list)):
+                        raise ValueError("JSON record %d field %r must be a "
+                                         "scalar value or null"
+                                         % (line_no - 1, name))
+                    values.append("" if value is None else str(value))
+                row = values
             if not row or all(not cell.strip() for cell in row):
                 continue
             if len(row) != expected:
@@ -336,12 +370,12 @@ def load_users(path, as_of, stale_days):
 
 
 def analyze_file(path, as_of=None, stale_days=DEFAULT_STALE_DAYS,
-                 max_admins=DEFAULT_MAX_ADMINS):
+                 max_admins=DEFAULT_MAX_ADMINS, input_format="csv"):
     """Audit one users file and return the report dict."""
     if as_of is None:
         as_of = datetime.date.today()
     users, findings, has_last_login = load_users(
-        path, as_of, stale_days)
+        path, as_of, stale_days, input_format)
     admins = [user for user in users if user.is_admin]
     if len(admins) > max_admins:
         findings.append(Finding(
@@ -416,11 +450,13 @@ def parse_as_of(value):
 def main(argv=None):
     """Entry point for the wp-user-doctor CLI."""
     parser = argparse.ArgumentParser(
-        description="Audit a WordPress users CSV export for "
+        description="Audit a WordPress users CSV or JSON export for "
                     "orphaned admins, stale accounts, the default "
                     "username admin, multiple roles, and personal "
                     "emails on admin accounts.")
-    parser.add_argument("path", help="CSV file of WordPress users")
+    parser.add_argument("path", help="CSV or JSON file of WordPress users")
+    parser.add_argument("--format", choices=("csv", "json"), default="csv",
+                        help="input format (default: csv)")
     parser.add_argument("--stale-days", type=int,
                         default=DEFAULT_STALE_DAYS,
                         help="days without a login before an account "
@@ -450,7 +486,8 @@ def main(argv=None):
     try:
         report = analyze_file(args.path, as_of=as_of,
                               stale_days=args.stale_days,
-                              max_admins=args.max_admins)
+                              max_admins=args.max_admins,
+                              input_format=args.format)
     except FileNotFoundError:
         print("error: file not found: %s" % args.path, file=sys.stderr)
         return 2
